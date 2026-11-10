@@ -41,6 +41,17 @@ pub fn cross_entropy(logits: Tensor<3>, targets: Tensor<2, Int>) -> Tensor<1> {
     picked.mean().neg()
 }
 
+/// 分类用的交叉熵：logits `[batch, num_classes]`，target `[batch]`。
+///
+/// 和上面的语言模型损失本质是同一个函数，只是少了一个序列维度。
+/// 第 6 章的垃圾邮件分类器用它。
+pub fn cross_entropy_classes(logits: Tensor<2>, targets: Tensor<1, Int>) -> Tensor<1> {
+    let [batch, _classes] = logits.dims();
+    let log_probs = log_softmax(logits, 1);
+    let picked = log_probs.gather(1, targets.reshape([batch, 1]));
+    picked.mean().neg()
+}
+
 /// 5.2：把 `(logits, targets)` 错位，得到下一步预测的输入/目标对。
 ///
 /// 训练时我们其实直接复用批次里的 `inputs` / `targets`（第 2 章已经错好位了），
@@ -120,5 +131,29 @@ mod tests {
         assert_eq!(l.dims(), [1, 4, 3]);
         assert_eq!(t.dims(), [1, 4]);
         assert_eq!(t.to_data().try_to_vec::<i32>().unwrap(), vec![1, 2, 1, 0]);
+    }
+
+    #[test]
+    fn class_loss_matches_language_model_loss() {
+        use burn::tensor::Int;
+        let device = Device::default();
+        // 两个类别的完美预测 → 损失≈0
+        let logits = Tensor::<2>::from_data(
+            TensorData::new(vec![0.0f32, 50.0, 50.0, 0.0], [2, 2]),
+            &device,
+        );
+        let targets = Tensor::<1, Int>::from_data(TensorData::new(vec![1i64, 0], [2]), &device);
+        let loss = cross_entropy_classes(logits, targets).into_scalar::<f32>();
+        assert!(loss < 1e-4, "完美分类损失应≈0，实际 {loss}");
+    }
+
+    #[test]
+    fn uniform_class_prediction_loses_ln2() {
+        use burn::tensor::Int;
+        let device = Device::default();
+        let logits = Tensor::<2>::zeros([4, 2], &device);
+        let targets = Tensor::<1, Int>::from_data(TensorData::new(vec![0i64, 1, 0, 1], [4]), &device);
+        let loss = cross_entropy_classes(logits, targets).into_scalar::<f32>();
+        assert!((loss - (2.0f32).ln()).abs() < 1e-5, "二分类均匀预测应为 ln2");
     }
 }

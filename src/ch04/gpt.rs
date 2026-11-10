@@ -157,6 +157,15 @@ impl Gpt {
 
     /// `idx: [batch, seq_len]`（整数词元 ID） → `logits: [batch, seq_len, vocab_size]`
     pub fn forward(&self, idx: Tensor<2, Int>) -> Tensor<3> {
+        let x = self.forward_hidden(idx);
+        self.apply_head(x)
+    }
+
+    /// 只跑到最终 LayerNorm 为止，不接输出头。
+    ///
+    /// 第 6 章做分类微调时要用它取「最后一个 token 的隐藏状态」当句子表示，
+    /// 再把输出头换成 2 分类的线性层。
+    pub fn forward_hidden(&self, idx: Tensor<2, Int>) -> Tensor<3> {
         let [batch, seq_len] = idx.dims();
         assert!(
             seq_len <= self.context_length,
@@ -178,8 +187,11 @@ impl Gpt {
             x = block.forward(x);
         }
 
-        let x = self.final_norm.forward(x);
+        self.final_norm.forward(x)
+    }
 
+    /// 把隐藏状态映射成词表 logits（第 4 章的原始行为）。
+    pub fn apply_head(&self, x: Tensor<3>) -> Tensor<3> {
         if self.tie_weights {
             // 真·权重共享：直接用词元嵌入矩阵做输出投影（d → vocab）
             // x[b, t, d] × Wᵀ[d, vocab] → logits[b, t, vocab]
@@ -197,6 +209,30 @@ impl Gpt {
         } else {
             self.out_head.forward(x)
         }
+    }
+
+    /// 隐藏层维度（emb_dim）。
+    pub fn hidden_dim(&self) -> usize {
+        self.tok_emb.weight.val().dims()[1]
+    }
+
+    /// Transformer 块数量。
+    pub fn num_blocks(&self) -> usize {
+        self.trf_blocks.len()
+    }
+
+    /// 解冻第 `from` 块及之后的所有块，以及最终 LayerNorm。
+    ///
+    /// 配合 `set_require_grad(false)` 使用：先整体冻结，再把尾部解冻。
+    /// 第 6 章分类微调只需要训练最后 1 块。
+    pub fn unfreeze_from_block(mut self, from: usize) -> Self {
+        self.final_norm = self.final_norm.set_require_grad(true);
+        let mut blocks = self.trf_blocks;
+        for block in blocks.iter_mut().skip(from) {
+            *block = block.clone().set_require_grad(true);
+        }
+        self.trf_blocks = blocks;
+        self
     }
 
     /// 取输出头权重（未共享时）或词元嵌入权重（共享时）。

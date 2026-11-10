@@ -154,6 +154,14 @@ impl WeightFile {
     }
 }
 
+fn tensor2(values: Vec<f32>, shape: [usize; 2], device: &Device) -> Tensor<2> {
+    Tensor::<2>::from_data(TensorData::new(values, shape), device)
+}
+
+fn tensor1(values: Vec<f32>, n: usize, device: &Device) -> Tensor<1> {
+    Tensor::<1>::from_data(TensorData::new(values, [n]), device)
+}
+
 /// 带断点续传的下载。
 ///
 /// 国内网络下载 550MB 经常中途断开，所以：
@@ -240,8 +248,10 @@ fn f16_to_f32(bits: u16) -> f32 {
     f32::from_bits(f32_bits)
 }
 
-/// 把 GPT-2 官方权重灌进我们的模型。
-pub fn load_gpt2(weights: &WeightFile, model: &mut Gpt, device: &Device) -> Result<()> {
+/// 只加载主干（嵌入 + Transformer 块 + final_norm），不碰输出头。
+///
+/// 第 6 章分类微调会把输出头换成 2 分类，所以不需要加载 lm_head。
+pub fn load_gpt2_backbone(weights: &WeightFile, model: &mut Gpt, device: &Device) -> Result<()> {
     let find = |name: &str| -> String {
         // 不同转换工具导出的 key 带有/不带有 `transformer.` 前缀，两种都试
         if weights.get(name).is_ok() {
@@ -267,6 +277,21 @@ pub fn load_gpt2(weights: &WeightFile, model: &mut Gpt, device: &Device) -> Resu
     // ---- 最终 LayerNorm ----
     load_layer_norm(weights, &mut model.final_norm, &find("ln_f.weight"), &find("ln_f.bias"), device)?;
 
+    Ok(())
+}
+
+/// 把 GPT-2 官方权重灌进我们的模型（含输出头）。
+pub fn load_gpt2(weights: &WeightFile, model: &mut Gpt, device: &Device) -> Result<()> {
+    load_gpt2_backbone(weights, model, device)?;
+
+    let find = |name: &str| -> String {
+        if weights.get(name).is_ok() {
+            name.to_string()
+        } else {
+            format!("transformer.{name}")
+        }
+    };
+
     // ---- 输出头 ----
     if model.is_weight_tied() {
         model.sync_output_head();
@@ -290,18 +315,21 @@ fn load_block(
     device: &Device,
 ) -> Result<()> {
     // 注意力：c_attn 是 QKV 三合一，要切开
-    let qkv = w.tensor2(&p("attn.c_attn.weight"), device)?;
-    let qkv_bias = w.tensor1(&p("attn.c_attn.bias"), device)?;
-    let (q, k, v) = split_qkv(qkv, device)?;
-    let (qb, kb, vb) = split_qkv_bias(qkv_bias, device)?;
+    let (qkv, qkv_shape) = w.get(&p("attn.c_attn.weight"))?;
+    let d = qkv_shape[0];
+    if qkv_shape != vec![d, 3 * d] {
+        bail!("c_attn 形状异常: {qkv_shape:?}");
+    }
+    let (q, k, v) = split_qkv_data(&qkv, d);
+    let (qb, kb, vb) = split_qkv_bias_data(&w.get(&p("attn.c_attn.bias"))?.0);
 
     let att: &mut MultiHeadAttention = &mut block.att;
-    att.w_query.weight = Param::from_tensor(q);
-    att.w_key.weight = Param::from_tensor(k);
-    att.w_value.weight = Param::from_tensor(v);
-    att.w_query.bias = Some(Param::from_tensor(qb));
-    att.w_key.bias = Some(Param::from_tensor(kb));
-    att.w_value.bias = Some(Param::from_tensor(vb));
+    att.w_query.weight = Param::from_tensor(tensor2(q, [d, d], device));
+    att.w_key.weight = Param::from_tensor(tensor2(k, [d, d], device));
+    att.w_value.weight = Param::from_tensor(tensor2(v, [d, d], device));
+    att.w_query.bias = Some(Param::from_tensor(tensor1(qb, d, device)));
+    att.w_key.bias = Some(Param::from_tensor(tensor1(kb, d, device)));
+    att.w_value.bias = Some(Param::from_tensor(tensor1(vb, d, device)));
 
     att.out_proj.weight = Param::from_tensor(w.tensor2(&p("attn.c_proj.weight"), device)?);
     att.out_proj.bias = Some(Param::from_tensor(w.tensor1(&p("attn.c_proj.bias"), device)?));
@@ -332,29 +360,37 @@ fn load_layer_norm(
     Ok(())
 }
 
-/// `[d, 3d]` → 三个 `[d, d]`；bias `[3d]` 同理。
-fn split_qkv(t: Tensor<2>, device: &Device) -> Result<(Tensor<2>, Tensor<2>, Tensor<2>)> {
-    let [d, three_d] = t.dims();
-    if three_d != 3 * d {
-        bail!("c_attn 形状异常: {d} × {three_d}");
+/// 从 `[d, 3d]` 的行主序数据里取出第 `i` 块列，得到 `[d, d]`。
+///
+/// ⚠️ 这里刻意不用 `tensor.slice()`：在 autodiff 设备上 slice 会产生**非叶子张量**，
+/// 而 `Param::from_tensor` 只接受叶子张量（否则报
+/// "Can't convert a non leaf tensor into a tracked tensor"）。
+/// 直接从原始数据重新构造张量，天然就是叶子。
+fn take_column_block(values: &[f32], d: usize, i: usize) -> Vec<f32> {
+    let stride = 3 * d;
+    let mut out = Vec::with_capacity(d * d);
+    for row in 0..d {
+        let start = row * stride + i * d;
+        out.extend_from_slice(&values[start..start + d]);
     }
-    let mut parts = Vec::with_capacity(3);
-    for i in 0..3 {
-        parts.push(t.clone().slice([0..d, (i * d)..((i + 1) * d)]));
-    }
-    let _ = device;
-    Ok((parts[0].clone(), parts[1].clone(), parts[2].clone()))
+    out
 }
 
-fn split_qkv_bias(t: Tensor<1>, device: &Device) -> Result<(Tensor<1>, Tensor<1>, Tensor<1>)> {
-    let [n] = t.dims();
-    let d = n / 3;
-    let mut parts = Vec::with_capacity(3);
-    for i in 0..3 {
-        parts.push(t.clone().slice([(i * d)..((i + 1) * d)]));
-    }
-    let _ = device;
-    Ok((parts[0].clone(), parts[1].clone(), parts[2].clone()))
+fn split_qkv_data(values: &[f32], d: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    (
+        take_column_block(values, d, 0),
+        take_column_block(values, d, 1),
+        take_column_block(values, d, 2),
+    )
+}
+
+fn split_qkv_bias_data(values: &[f32]) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    let d = values.len() / 3;
+    (
+        values[0..d].to_vec(),
+        values[d..2 * d].to_vec(),
+        values[2 * d..3 * d].to_vec(),
+    )
 }
 
 /// 便捷入口：给定权重文件，构造一个已加载好权重的 GPT-2 small。
@@ -381,31 +417,22 @@ mod tests {
 
     #[test]
     fn split_qkv_partitions_columns() {
-        let device = Device::default();
-        // [2, 6] → 三个 [2, 2]，分别应取第 0-1、2-3、4-5 列
-        let t = Tensor::<2>::from_data(
-            TensorData::new(vec![0.0f32, 1.0, 2.0, 3.0, 4.0, 5.0], [2, 3]),
-            &device,
-        );
-        // 注意这里 [2,3] 不满足 3d 约束，用 3 块 [2,1] 的方式验证会 panic，改用正确形状
-        let t2 = Tensor::<2>::from_data(
-            TensorData::new(
-                vec![
-                    0.0f32, 1.0, 10.0, 11.0, 20.0, 21.0, //
-                    2.0, 3.0, 12.0, 13.0, 22.0, 23.0,
-                ],
-                [2, 6],
-            ),
-            &device,
-        );
-        let (q, k, v) = split_qkv(t2, &device).unwrap();
-        assert_eq!(q.dims(), [2, 2]);
-        let qv = q.to_data().try_to_vec::<f32>().unwrap();
-        let kv = k.to_data().try_to_vec::<f32>().unwrap();
-        let vv = v.to_data().try_to_vec::<f32>().unwrap();
-        assert_eq!(qv, vec![0.0, 1.0, 2.0, 3.0]);
-        assert_eq!(kv, vec![10.0, 11.0, 12.0, 13.0]);
-        assert_eq!(vv, vec![20.0, 21.0, 22.0, 23.0]);
-        let _ = t;
+        // [d=2, 3d=6] 行主序：每行前三列→q，中间三列→k，后三列→v
+        let values = vec![
+            0.0f32, 1.0, 10.0, 11.0, 20.0, 21.0, //
+            2.0, 3.0, 12.0, 13.0, 22.0, 23.0,
+        ];
+        let (q, k, v) = split_qkv_data(&values, 2);
+        assert_eq!(q, vec![0.0, 1.0, 2.0, 3.0]);
+        assert_eq!(k, vec![10.0, 11.0, 12.0, 13.0]);
+        assert_eq!(v, vec![20.0, 21.0, 22.0, 23.0]);
+    }
+
+    #[test]
+    fn split_bias_into_three_parts() {
+        let (q, k, v) = split_qkv_bias_data(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(q, vec![1.0, 2.0]);
+        assert_eq!(k, vec![3.0, 4.0]);
+        assert_eq!(v, vec![5.0, 6.0]);
     }
 }

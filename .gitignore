@@ -1,5 +1,6 @@
 /target
 *.mpk
 *.burnpack
-/data
+/data/*
+!/data/sms_spam.tsv
 /tmp

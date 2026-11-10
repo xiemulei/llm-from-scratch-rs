@@ -12,7 +12,7 @@
 | 第 3 章 | 注意力机制 | ✅ |
 | 第 4 章 | 从零实现 GPT 模型 | ✅ |
 | 第 5 章 | 在无标注数据上预训练 + 加载 GPT-2 权重 | ✅ |
-| 第 6 章 | 文本分类微调 | ⬜ |
+| 第 6 章 | 文本分类微调（垃圾短信） | ✅ |
 | 第 7 章 | 指令跟随微调 | ⬜ |
 
 ## 运行
@@ -59,13 +59,18 @@ src/
 │   ├── text.rs               5.1   语料 → 词元 → 批次
 │   ├── train.rs              5.3-5.4 训练循环 + 预热/余弦调度 + 梯度裁剪
 │   └── weights.rs            5.5   加载 GPT-2 官方权重（safetensors）
+├── ch06/                 # 第 6 章：分类微调
+│   ├── data.rs               6.1-6.3 数据集切分 / 平衡 / 补齐 / 分批
+│   ├── classifier.rs         6.4-6.6 换输出头 + 冻结 + last-token 分类
+│   └── train.rs              6.7-6.8 微调循环与准确率评估
 ├── tools/
 │   └── verify_numpy.py   # 独立的 numpy 参考实现，用来交叉验证推理结果
 └── bin/
     ├── ch02.rs           # 逐节演示，对应书中的打印输出
     ├── ch03.rs
     ├── ch04.rs
-    └── ch05.rs
+    ├── ch05.rs
+    └── ch06.rs
 ```
 
 ## 第 5 章的权重下载
@@ -90,3 +95,24 @@ python tools/verify_numpy.py data/gpt2.safetensors
 ```
 
 加载权重后对一句普通英文的困惑度是 **80.9**（perplexity），这就是"权重加载正确"的硬指标。
+
+## 第 6 章：数据与控制耗时
+
+垃圾短信数据集（UCI SMS Spam Collection，5574 条）已放在 `data/sms_spam.tsv`，
+不需要联网下载。
+
+CPU 上没有 GPU 时，可以限制训练规模：
+
+```bash
+cargo run --release --bin ch06 -- --epochs 1 --max-batches 100 --eval-interval 50
+```
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--epochs` | 1 | 训练轮数（书中是 5） |
+| `--max-batches` | 40 | 每轮最多用多少批次（书中是全部 488） |
+| `--batch-size` | 8 | 批大小 |
+| `--max-eval-batches` | 15 | 验证集最多评估多少批次 |
+| `--eval-interval` | 25 | 每多少步评估一次 |
+
+测试集**总是完整评估**：平衡集里 spam 全排在前面，只取前几批会得到假指标。
