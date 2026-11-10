@@ -10,7 +10,7 @@
 | 第 1 章 | 理解大语言模型（概念 / 全局图景） | ✅ |
 | 第 2 章 | 文本数据处理：分词、BPE、滑动窗口、词嵌入 | ✅ |
 | 第 3 章 | 注意力机制 | ✅ |
-| 第 4 章 | 从零实现 GPT 模型 | ⬜ |
+| 第 4 章 | 从零实现 GPT 模型 | ✅ |
 | 第 5 章 | 在无标注数据上预训练 | ⬜ |
 | 第 6 章 | 文本分类微调 | ⬜ |
 | 第 7 章 | 指令跟随微调 | ⬜ |
@@ -47,7 +47,15 @@ src/
 │   ├── self_attention.rs     3.4   带 Wq/Wk/Wv 的自注意力
 │   ├── causal.rs             3.5   因果掩码 + dropout
 │   └── multi_head.rs         3.6   多头（朴素堆叠 vs 权重切分）
+├── ch04/                 # 第 4 章：GPT 模型
+│   ├── layer_norm.rs         4.2   手写 LayerNorm + 与 nn::LayerNorm 对照
+│   ├── feed_forward.rs       4.3   GELU（tanh 近似）+ 前馈网络
+│   ├── attention.rs          4.6   GPT-2 忠实版多头注意力（qkv_bias）
+│   ├── transformer_block.rs  4.4-4.5 残差连接 + Pre-LN 组装
+│   ├── gpt.rs                4.6   GPTConfig / GPTModel / 权重共享
+│   └── generate.rs           4.7   贪心 / 温度 / Top-k 解码
 └── bin/
     ├── ch02.rs           # 逐节演示，对应书中的打印输出
-    └── ch03.rs
+    ├── ch03.rs
+    └── ch04.rs
 ```
