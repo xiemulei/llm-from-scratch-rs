@@ -4,11 +4,11 @@
 //! 对应的可运行演示见 `src/bin/chXX.rs`。
 
 pub mod ch01;
+pub mod ch02;
 
 /// 统一的分隔线输出，让章节演示的打印结果像书里一样分块。
 pub fn section(title: &str) {
-    println!("
-{}", "=".repeat(72));
+    println!("\n{}", "=".repeat(72));
     println!("{title}");
     println!("{}", "=".repeat(72));
 }
