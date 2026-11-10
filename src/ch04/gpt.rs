@@ -69,12 +69,12 @@ pub fn gpt_config_124m() -> GPTConfig {
 
 #[derive(Module, Debug)]
 pub struct Gpt {
-    tok_emb: Embedding,
-    pos_emb: Embedding,
+    pub(crate) tok_emb: Embedding,
+    pub(crate) pos_emb: Embedding,
     drop_emb: Dropout,
-    trf_blocks: Vec<TransformerBlock>,
-    final_norm: LayerNorm,
-    out_head: Linear,
+    pub(crate) trf_blocks: Vec<TransformerBlock>,
+    pub(crate) final_norm: LayerNorm,
+    pub(crate) out_head: Linear,
     context_length: usize,
     tie_weights: bool,
 }

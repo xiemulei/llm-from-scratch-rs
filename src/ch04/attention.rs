@@ -16,10 +16,10 @@ use crate::ch03::causal::causal_mask;
 
 #[derive(Module, Debug)]
 pub struct MultiHeadAttention {
-    w_query: Linear,
-    w_key: Linear,
-    w_value: Linear,
-    out_proj: Linear,
+    pub(crate) w_query: Linear,
+    pub(crate) w_key: Linear,
+    pub(crate) w_value: Linear,
+    pub(crate) out_proj: Linear,
     dropout: Dropout,
     n_heads: usize,
     head_dim: usize,

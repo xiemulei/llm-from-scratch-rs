@@ -26,10 +26,10 @@ use super::causal::{causal_mask, CausalSelfAttention};
 /// 3.6.2：高效的多头注意力（GPT-2 采用的形式）。
 #[derive(Module, Debug)]
 pub struct MultiHeadAttention {
-    w_query: Linear,
-    w_key: Linear,
-    w_value: Linear,
-    out_proj: Linear,
+    pub(crate) w_query: Linear,
+    pub(crate) w_key: Linear,
+    pub(crate) w_value: Linear,
+    pub(crate) out_proj: Linear,
     dropout: Dropout,
     n_heads: usize,
     head_dim: usize,
@@ -123,7 +123,7 @@ impl MultiHeadAttention {
 #[derive(Module, Debug)]
 pub struct MultiHeadAttentionWrapper {
     heads: Vec<CausalSelfAttention>,
-    out_proj: Linear,
+    pub(crate) out_proj: Linear,
     n_heads: usize,
     d_out: usize,
 }

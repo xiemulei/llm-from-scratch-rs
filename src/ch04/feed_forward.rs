@@ -24,8 +24,8 @@ use burn::tensor::Tensor;
 /// 逐位置前馈网络：`Linear(d → 4d) → GELU → Linear(4d → d)`
 #[derive(Module, Debug)]
 pub struct FeedForward {
-    fc1: Linear,
-    fc2: Linear,
+    pub(crate) fc1: Linear,
+    pub(crate) fc2: Linear,
     gelu: Gelu,
     d_ff: usize,
 }

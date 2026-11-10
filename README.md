@@ -11,7 +11,7 @@
 | 第 2 章 | 文本数据处理：分词、BPE、滑动窗口、词嵌入 | ✅ |
 | 第 3 章 | 注意力机制 | ✅ |
 | 第 4 章 | 从零实现 GPT 模型 | ✅ |
-| 第 5 章 | 在无标注数据上预训练 | ⬜ |
+| 第 5 章 | 在无标注数据上预训练 + 加载 GPT-2 权重 | ✅ |
 | 第 6 章 | 文本分类微调 | ⬜ |
 | 第 7 章 | 指令跟随微调 | ⬜ |
 
@@ -54,8 +54,39 @@ src/
 │   ├── transformer_block.rs  4.4-4.5 残差连接 + Pre-LN 组装
 │   ├── gpt.rs                4.6   GPTConfig / GPTModel / 权重共享
 │   └── generate.rs           4.7   贪心 / 温度 / Top-k 解码
+├── ch05/                 # 第 5 章：预训练
+│   ├── loss.rs               5.2   交叉熵 / 困惑度 / 错位
+│   ├── text.rs               5.1   语料 → 词元 → 批次
+│   ├── train.rs              5.3-5.4 训练循环 + 预热/余弦调度 + 梯度裁剪
+│   └── weights.rs            5.5   加载 GPT-2 官方权重（safetensors）
+├── tools/
+│   └── verify_numpy.py   # 独立的 numpy 参考实现，用来交叉验证推理结果
 └── bin/
     ├── ch02.rs           # 逐节演示，对应书中的打印输出
     ├── ch03.rs
-    └── ch04.rs
+    ├── ch04.rs
+    └── ch05.rs
 ```
+
+## 第 5 章的权重下载
+
+`cargo run --release --bin ch05` 会自动下载 GPT-2 124M 权重到 `./data/gpt2.safetensors`（548MB）。
+下载源按速度排序：**ModelScope**（实测 ~11MB/s）→ hf-mirror → 官方 HuggingFace。
+支持断点续传，中断后重跑会从断点继续。
+
+也可以手动下载后放到该路径：
+
+```bash
+curl -L -C - -o data/gpt2.safetensors   "https://modelscope.cn/api/v1/models/AI-ModelScope/gpt2/repo?Revision=master&FilePath=model.safetensors"
+```
+
+## 正确性验证
+
+`tools/verify_numpy.py` 是一个只依赖 numpy 的独立 GPT-2 实现（直接读同一份 safetensors）。
+两个实现的 logits 逐位一致，可以用于排查问题：
+
+```bash
+python tools/verify_numpy.py data/gpt2.safetensors
+```
+
+加载权重后对一句普通英文的困惑度是 **80.9**（perplexity），这就是"权重加载正确"的硬指标。

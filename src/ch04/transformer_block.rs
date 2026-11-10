@@ -35,10 +35,10 @@ use super::feed_forward::FeedForward;
 
 #[derive(Module, Debug)]
 pub struct TransformerBlock {
-    att: MultiHeadAttention,
-    ff: FeedForward,
-    norm1: LayerNorm,
-    norm2: LayerNorm,
+    pub(crate) att: MultiHeadAttention,
+    pub(crate) ff: FeedForward,
+    pub(crate) norm1: LayerNorm,
+    pub(crate) norm2: LayerNorm,
     dropout: Dropout,
 }
 
