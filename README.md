@@ -13,7 +13,7 @@
 | 第 4 章 | 从零实现 GPT 模型 | ✅ |
 | 第 5 章 | 在无标注数据上预训练 + 加载 GPT-2 权重 | ✅ |
 | 第 6 章 | 文本分类微调（垃圾短信） | ✅ |
-| 第 7 章 | 指令跟随微调 | ⬜ |
+| 第 7 章 | 指令跟随微调 | ✅ |
 
 ## 运行
 
@@ -63,6 +63,9 @@ src/
 │   ├── data.rs               6.1-6.3 数据集切分 / 平衡 / 补齐 / 分批
 │   ├── classifier.rs         6.4-6.6 换输出头 + 冻结 + last-token 分类
 │   └── train.rs              6.7-6.8 微调循环与准确率评估
+├── ch07/                 # 第 7 章：指令微调
+│   ├── data.rs               7.1-7.4 Alpaca 模板 / 损失掩码 / 分批
+│   └── train.rs              7.5-7.7 掩码交叉熵 / 微调 / 生成回答
 ├── tools/
 │   └── verify_numpy.py   # 独立的 numpy 参考实现，用来交叉验证推理结果
 └── bin/
@@ -70,7 +73,8 @@ src/
     ├── ch03.rs
     ├── ch04.rs
     ├── ch05.rs
-    └── ch06.rs
+    ├── ch06.rs
+    └── ch07.rs
 ```
 
 ## 第 5 章的权重下载
@@ -116,3 +120,20 @@ cargo run --release --bin ch06 -- --epochs 1 --max-batches 100 --eval-interval 5
 | `--eval-interval` | 25 | 每多少步评估一次 |
 
 测试集**总是完整评估**：平衡集里 spam 全排在前面，只取前几批会得到假指标。
+
+## 第 7 章：指令微调
+
+数据集 `data/instruction-data.json`（1100 条）已在仓库里。CPU 上同样用参数控制规模：
+
+```bash
+cargo run --release --bin ch07 -- --epochs 1 --max-batches 60
+```
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--epochs` | 1 | 训练轮数（书中是 5） |
+| `--max-batches` | 60 | 每轮最多用多少批次（全量是 117） |
+| `--batch-size` | 8 | 批大小 |
+
+和预训练唯一的区别是**损失掩码**：指令部分的 `mask = false`，回答部分 `mask = true`，
+`masked_cross_entropy` 只对 `true` 的位置求平均。

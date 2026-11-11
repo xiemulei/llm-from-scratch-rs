@@ -129,8 +129,12 @@ impl Gpt {
         // ⚠️ 权重布局坑：Burn 的 Linear 权重是 [d_input, d_output]（行主序），
         // 而 PyTorch 的 nn.Linear 是 [d_output, d_input]。所以这里必须转置。
         // 词元嵌入是 [vocab, d]，转置后 [d, vocab] 才符合 Linear(d → vocab)。
-        let w = self.tok_emb.weight.val().swap_dims(0, 1);
-        self.out_head.weight = burn::module::Param::from_tensor(w);
+        // 先转成 TensorData 再重建张量：`swap_dims` 会产生**非叶子张量**，
+        // 而在 autodiff 设备上 `Param::from_tensor` 只接受叶子张量。
+        let device = self.tok_emb.weight.val().device();
+        let data = self.tok_emb.weight.val().swap_dims(0, 1).into_data();
+        self.out_head.weight =
+            burn::module::Param::from_tensor(Tensor::<2>::from_data(data, &device));
     }
 
     pub fn is_weight_tied(&self) -> bool {

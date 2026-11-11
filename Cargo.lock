@@ -4059,6 +4059,8 @@ dependencies = [
  "anyhow",
  "burn",
  "safetensors 0.8.0",
+ "serde",
+ "serde_json",
  "tiktoken-rs",
  "ureq 3.5.1",
 ]

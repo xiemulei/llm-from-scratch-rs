@@ -9,6 +9,7 @@ pub mod ch03;
 pub mod ch04;
 pub mod ch05;
 pub mod ch06;
+pub mod ch07;
 
 /// 统一的分隔线输出，让章节演示的打印结果像书里一样分块。
 pub fn section(title: &str) {
