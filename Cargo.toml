@@ -5,8 +5,11 @@ edition = "2021"
 description = "《从零构建大模型》(Build a Large Language Model From Scratch) 的 Rust / Burn 实现"
 
 [dependencies]
-# Burn 0.22 起取消了 backend 泛型参数：Tensor<2> 只带维度，Device 是运行时枚举
-burn = { version = "0.22.1", features = ["flex"] }
+# Burn 0.22 起取消了 backend 泛型参数：Tensor<2> 只带维度，Device 是运行时枚举。
+# 执行后端由下面的 [features] 决定：
+#   cargo run --release --bin ch06                 → CPU (flex)
+#   cargo run --release --bin ch06 --features gpu  → GPU (wgpu，自动挑 Vulkan/DX12/Metal)
+burn = { version = "0.22.1" }
 tiktoken-rs = "0.12"
 anyhow = "1"
 # 读取 HuggingFace 的 safetensors 权重
@@ -16,6 +19,14 @@ ureq = "3"
 # 读取指令微调数据集（JSON）
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[features]
+# 默认走纯 Rust CPU 后端，任何机器都能直接跑
+default = ["cpu"]
+cpu = ["burn/flex"]
+# 跨平台 GPU：NVIDIA / AMD / Intel / Apple 通用，代码无需改动
+# `persistence` 让 CubeCL 编译好的 kernel 跨进程复用，否则换卡后第一次运行要重新编译
+gpu = ["burn/wgpu", "burn/persistence"]
 
 # 依赖用 O3 编译（burn 的张量运算在 debug 下慢到无法接受），自己的代码保持 O1 便于调试
 [profile.dev]

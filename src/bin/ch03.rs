@@ -31,8 +31,7 @@ fn book_inputs(device: &Device) -> Tensor<2> {
 }
 
 fn main() {
-    let device = Device::default();
-    println!("设备: {device:?}");
+    let device = llm_from_scratch::init_device();
 
     demo_3_3(&device);
     demo_3_4(&device);

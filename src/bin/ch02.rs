@@ -3,7 +3,7 @@
 //! 运行：`cargo run --bin ch02`
 
 use anyhow::Result;
-use burn::tensor::Device;
+
 use llm_from_scratch::ch02::{
     bpe::Bpe,
     dataset::{make_batches, GptDataset},
@@ -146,8 +146,7 @@ fn demo_dataset() {
 /// 2.7 / 2.8 词元嵌入与位置编码
 fn demo_embeddings() {
     section("2.7-2.8 词元嵌入 + 位置编码");
-    let device = Device::default();
-    println!("设备: {device:?}");
+    let device = llm_from_scratch::init_device();
 
     let vocab_size = 50257;
     let emb_dim = 256;

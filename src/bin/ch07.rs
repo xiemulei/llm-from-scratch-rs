@@ -45,8 +45,7 @@ fn parse_args() -> Args {
 
 fn main() -> Result<()> {
     let args = parse_args();
-    let device = Device::default();
-    println!("设备: {device:?}");
+    let device = llm_from_scratch::init_device();
 
     let tk = Gpt2Tokenizer::new()?;
 

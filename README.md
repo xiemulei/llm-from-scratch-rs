@@ -18,8 +18,43 @@
 ## 运行
 
 ```bash
-cargo run --bin ch02
+cargo run --release --bin ch02          # CPU（默认，flex 后端）
+cargo run --release --features gpu --bin ch02   # GPU（wgpu 后端）
 ```
+
+## 后端选择
+
+代码里统一写 `Device::default()`，**换后端不需要改任何代码**，只切换 Cargo feature：
+
+| 命令 | 后端 | 适用 |
+|---|---|---|
+| `cargo run --release --bin chXX` | `Flex`（纯 Rust CPU） | 任何机器，开箱即用 |
+| `cargo run --release --features gpu --bin chXX` | `Wgpu`（Vulkan/DX12/Metal/WebGPU） | NVIDIA / AMD / Intel / Apple 通用 |
+
+`Device::default()` 会按「独显 > 集显 > CPU」自动挑设备，启动时打印实际选中项：
+
+```
+设备: Device<Cube(Wgpu(WgpuDevice { kind: DefaultDevice, backend: Auto }))>   ← GPU
+设备: Device<Flex(Cpu)>                                                      ← CPU
+```
+
+运行时强制切换已编译的后端：`BURN_DEVICE=cpu` / `BURN_DEVICE=wgpu`。
+
+注意：勾选 `gpu` feature 时默认仍会同时编译 `cpu`（`default = ["cpu"]`），
+只想要 GPU 用 `--no-default-features --features gpu`。
+
+### 实测速度
+
+`cargo run --release [--features gpu] --example bench_step`
+（GPT-2 124M 全参数训练步，batch 8 × seq 64，本机 Ryzen AI 9 H365 + Radeon 880M 核显）
+
+| 后端 | 每步耗时 | 吞吐 | 等效算力 |
+|---|---|---|---|
+| Flex (CPU, 20 线程) | 4994 ms | 103 token/s | ~76 GFLOP/s |
+| Wgpu (Radeon 880M 核显) | **791 ms** | **648 token/s** | **~482 GFLOP/s** |
+
+核显上快 **6.3 倍**。Arc A770 / RTX 这类独显预期还能再快数倍。
+首次运行 GPU 需要 JIT 编译 kernel（约 1 分钟），之后有缓存。
 
 ## 关于 Burn 0.22
 

@@ -16,8 +16,7 @@ use llm_from_scratch::ch04::{
 use llm_from_scratch::section;
 
 fn main() {
-    let device = Device::default();
-    println!("设备: {device:?}");
+    let device = llm_from_scratch::init_device();
 
     demo_4_2_layer_norm(&device);
     demo_4_3_gelu(&device);

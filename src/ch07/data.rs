@@ -255,7 +255,17 @@ mod tests {
         ];
         let b = &make_batches(&data, 2, &device)[0];
         assert_eq!(b.inputs.dims(), [2, 4]);
-        let mask = b.mask.to_data().try_to_vec::<bool>().unwrap();
+        // ⚠️ Bool 张量的存储布局是后端相关的：flex 用 Bool(Native)，
+        // wgpu 用 Bool(U32)。直接 try_to_vec::<bool>() 在 GPU 上会 DTypeMismatch，
+        // 所以先转成整数再读回，这样两个后端都通用。
+        let mask: Vec<i32> = b
+            .mask
+            .clone()
+            .int()
+            .to_data()
+            .try_to_vec::<i32>()
+            .unwrap();
+        let mask: Vec<bool> = mask.into_iter().map(|v| v != 0).collect();
         // 第二条样本只有 2 个词元：[1, 2]，掩码 [false, true]。
         // 左移一位后第 0 个位置的目标是词元 2（属于回答）→ true；
         // 第 1、2、3 列是填充或越界 → 必须被掩掉。

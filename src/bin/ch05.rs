@@ -16,8 +16,7 @@ use llm_from_scratch::ch05::weights::{load_gpt2, WeightFile};
 use llm_from_scratch::section;
 
 fn main() -> Result<()> {
-    let device = Device::default();
-    println!("设备: {device:?}");
+    let device = llm_from_scratch::init_device();
 
     let tk = Gpt2Tokenizer::new()?;
     demo_5_1_corpus(&tk);
