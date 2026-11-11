@@ -11,7 +11,7 @@
 use std::time::Instant;
 
 use burn::optim::{AdamWConfig, GradientsParams};
-use burn::tensor::{Device, Int, Tensor, TensorData};
+use burn::tensor::{Int, Tensor, TensorData};
 use llm_from_scratch::ch04::gpt::{gpt_config_124m, Gpt};
 use llm_from_scratch::ch05::loss::cross_entropy;
 
